@@ -26,7 +26,7 @@ default_args = {
 # Get COVID data from Thai Department of Disease Control and save to Google Storage
 def get_data(bucket):
     response = requests.get("https://covid19.th-stat.com/api/open/timeline")
-    df = response.json
+    df = response.json()
     print(bucket)
     print(df)
 
