@@ -12,6 +12,7 @@ from airflow.models import Variable
 bangkok_tz = pendulum.timezone("Asia/Bangkok")
 covid_pipeline = Variable.get("covid_pipeline", deserialize_json = True)
 bucket = covid_pipeline["bucket"]
+data_date = datetime.now(bangkok_tz) - timedelta(days=1)
 
 default_args = {
     "owner": "max",
@@ -24,9 +25,11 @@ default_args = {
 }
 
 # Get COVID data from Thai Department of Disease Control and save to Google Storage
-def get_data(bucket):
+def get_data(bucket, **kwargs):
     response = requests.get("https://covid19.th-stat.com/api/open/timeline")
     df = response.json()
+    df = pd.DataFrame(df)
+    df.to_csv('/home/airflow/gcs/data/covid/' + data_date.strftime('%d-%m-%Y') + '.csv', index=False)
     print(bucket)
     print(df)
 
