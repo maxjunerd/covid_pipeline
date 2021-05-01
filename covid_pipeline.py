@@ -6,6 +6,7 @@ from google.cloud import storage
 
 from airflow import DAG
 from airflow.operators.python_operator import PythonOperator
+from airflow.operators.bash_operator import BashOperator
 from airflow.utils.dates import days_ago
 from airflow.models import Variable
 
@@ -15,6 +16,7 @@ bucket = covid_pipeline['bucket']
 table = covid_pipeline['table']
 file_path = covid_pipeline['file_path']
 data_date = datetime.now(bangkok_tz) - timedelta(days=1)
+file_name_and_path = file_path + data_date.strftime('%d-%m-%Y') + '.csv'
 
 default_args = {
     'owner': 'max',
@@ -39,6 +41,11 @@ def get_data(bucket, data_date, **kwargs):
 def check_and_ingest(data_date, **kwargs):
     df = pd.read_csv('/home/airflow/gcs/data/covid/' + data_date.strftime('%d-%m-%Y') + '.csv')
 
+bs_to_bq_bash = '''
+bq query --use_legacy_sql=false delete 'from covid.covid_thailand where true' && 
+bq load --source_format=CSV --autodetect covid.covid_thailand {{ params.file_name_and_path }}
+'''
+
 with DAG(
     'covid_pipeline',
     default_args=default_args,
@@ -58,5 +65,11 @@ with DAG(
             }
     )
 
-    get_data_task
+    ingest_from_gs_to_bq = BashOperator(
+        task_id='ingest_from_gs_to_bq',
+        bash_command=bs_to_bq_bash,
+        params={'file_name_and_path': file_name_and_path}
+    )
+
+    get_data_task >> ingest_from_gs_to_bq
     
