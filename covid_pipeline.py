@@ -1,13 +1,11 @@
 import pandas as pd
 import requests
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 import pendulum 
-from google.cloud import storage
 
 from airflow import DAG
 from airflow.operators.python_operator import PythonOperator
 from airflow.operators.bash_operator import BashOperator
-from airflow.utils.dates import days_ago
 from airflow.models import Variable
 
 bangkok_tz = pendulum.timezone('Asia/Bangkok')
@@ -35,15 +33,11 @@ def get_data(bucket, data_date, **kwargs):
     df = pd.DataFrame(df)
     covid_data = pd.json_normalize(df['Data'])
     covid_data.to_csv(bucket + data_date.strftime('%d-%m-%Y') + '.csv', index=False)
-    print(bucket)
-    print(df)
 
-def check_and_ingest(data_date, **kwargs):
-    df = pd.read_csv('/home/airflow/gcs/data/covid/' + data_date.strftime('%d-%m-%Y') + '.csv')
-
+# Delete all rows from the table and ingest new data 
 bs_to_bq_bash = '''
-bq query --use_legacy_sql=false delete 'from covid.covid_thailand where true' && 
-bq load --source_format=CSV --autodetect covid.covid_thailand {{ params.file_name_and_path }}
+bq query --use_legacy_sql=false delete 'from {{ params.table }} where true' && 
+bq load --source_format=CSV --autodetect {{ params.table }} {{ params.file_name_and_path }}
 '''
 
 with DAG(
@@ -68,7 +62,9 @@ with DAG(
     ingest_from_gs_to_bq = BashOperator(
         task_id='ingest_from_gs_to_bq',
         bash_command=bs_to_bq_bash,
-        params={'file_name_and_path': file_name_and_path}
+        params={
+            'file_name_and_path': file_name_and_path,
+            'table': table}
     )
 
     get_data_task >> ingest_from_gs_to_bq
